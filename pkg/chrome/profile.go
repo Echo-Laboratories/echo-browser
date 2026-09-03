@@ -38,7 +38,10 @@ func ResolveUserDataDir(name string, ephemeral bool) (string, error) {
 	if name == "" {
 		name = "default"
 	}
-	clean := filepath.Base(name)
+	// Treat both / and \ as separators so a Windows-style path cannot
+	// slip through on Unix (CI) or the reverse.
+	normalized := strings.ReplaceAll(name, `\`, "/")
+	clean := filepath.Base(filepath.FromSlash(normalized))
 	clean = strings.TrimSpace(clean)
 	if clean == "" || clean == "." || clean == ".." {
 		return "", fmt.Errorf("chrome: invalid profile name %q", name)

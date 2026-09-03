@@ -11,21 +11,24 @@ func TestResolveRejectsTraversal(t *testing.T) {
 	if _, err := ResolveUserDataDir("..", false); err == nil {
 		t.Fatal("expected error for ..")
 	}
-	dir, err := ResolveUserDataDir(`..\..\evil`, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	root, err := filepath.Abs(DefaultProfileRoot())
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := filepath.Abs(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(got, root) {
-		t.Fatalf("%s escaped %s", got, root)
+	for _, name := range []string{`..\..\evil`, `../../evil`} {
+		dir, err := ResolveUserDataDir(name, false)
+		if err != nil {
+			t.Fatalf("%q: %v", name, err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		got, err := filepath.Abs(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rel, err := filepath.Rel(root, got)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			t.Fatalf("%q escaped %s -> %s", name, root, got)
+		}
 	}
 }
 
