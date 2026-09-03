@@ -1,91 +1,24 @@
-# GREENLIGHT 🚦
+# Echo Browser
 
-Greenlight is the first undetected Golang based Web-Automation Framework. Greenlight was made to create a way for Golang devs to utilize the lightweight code for fast automation browsing. With added error handling internally, the user can write their code just like playwright in python! No more err pain! Greenlight was named after the traffic light system. Greenlight, or go starts the browser initialization. YellowLight slows down the browser or does a wait/sleep function. Finally RedLight closes the browser and comes to a complete stop. Usage shown below :) 
+Go automation for **real installed Chrome**. Echo drives the browser over the Chrome DevTools Protocol with a control plane that looks like a person using Chrome: headed by default, stock binary, persistent profile, isolated-world reads, and trusted pointer/keyboard events.
 
-## Installation
+It is not a fingerprint-spoofing browser, not a Chromium fork, and not a challenge solver.
 
-```go
-go get github.com/bosniankicks/greenlight
-go mod tidy
+## Principles
+
+- **Be Chrome.** Use the system Google Chrome, its GPU, fonts, locale, timezone, and TLS. Do not randomize those.
+- **Do not inject stealth scripts** into the page (`navigator.webdriver = false`, fake `window.chrome`, canvas noise). Those patches are signatures.
+- **Never `Runtime.enable`**, never evaluate in the page world. Reads go through `Page.createIsolatedWorld`. Clicks and typing go through `Input.dispatchMouseEvent` / `Input.dispatchKeyEvent`.
+- **Headed is the stealth default.** Headless is first-class (`--headless=new` on real Chrome) with a Chrome UA (no `HeadlessChrome`) and a real `--screen-info` instead of 800×600. `Hidden` is headed Chrome parked off-screen when you need no window but still want a real display.
+- **No vendor bypasses.** Cloudflare Turnstile, reCAPTCHA, Akamai, Kasada, DataDome, and similar challenges are out of scope. A headed window can wait while a human solves them.
+
+## Install
+
+```bash
+go get github.com/Echo-Laboratories/echo-browser
 ```
 
-## Components
-
-```go
-GreenLight(chromePath string, headless bool, startURL string)
-
-Initializes Chrome browser instance
-Args:
-
-- chromePath: Path to Chrome executable
-- headless: Run browser without GUI
-- startURL: Starting URL
-
-- Returns: Browser instance
-```
-
-```go
-RedLight()
-
-- Closes browser and cleans up resources
-```
-
-```go
-page.Goto(url string)
-
-- Navigates to specified URL
-```
-
-```go
-page.YellowLight(milliseconds int)
-
-- Pauses execution for specified milliseconds (same usage as waitForTimeout)
-```
-
-```go
-page.Locator(selector string)
-
-- Finds element using CSS selector
-- Returns: Locator object
-```
-
-```go
-locator.Fill(value string)
-
-- Clears and fills input element
-- Built-in 30s timeout, retries every 350ms
-```
-
-```go
-locator.Click()
-
-- Clicks element
-- Built-in 30s timeout
-```
-
-## Typing Functions (Added)
-
-
-```go
-locator.TypeSequentially(text string, delayMs int)
-
-- Types text with delay between each character
-
-Args:
-text: String to type
-delayMs: Millisecond delay between keystrokes
-```
-
-```go
-locator.TypeWithMistakes(text string, delayMs int)
-
-- Types with human-like mistakes and corrections
-- Randomly adds typos and backspaces
-
-Args:
-text: String to type
-delayMs: Base typing speed
-```
+Requires Go 1.23+ and Google Chrome.
 
 ## Usage
 
@@ -93,54 +26,131 @@ delayMs: Base typing speed
 package main
 
 import (
-    browser "github.com/bosniankicks/greenlight/pkg/browser"
+    "context"
+    "log"
+    "time"
+
+    echo "github.com/Echo-Laboratories/echo-browser"
+    "github.com/Echo-Laboratories/echo-browser/pkg/input"
 )
 
 func main() {
-    // Initialize browser - use your browser path wanted 
-    // keep headless as false for now (not enough testing)
-    // if you want to force the browser to begin the automation at a URL right away, 
-    // it will auto open the url inside the greenlight func.
-    // If you want a slower load visit google first or example.com then use goto. 
+    ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+    defer cancel()
 
-    b := browser.GreenLight("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", false, "https://example.com")
-    defer b.RedLight() //either use this to auto close the browser or use b.RedLight() at the end of the script
+    b, err := echo.Launch(ctx, echo.Options{
+        // ChromePath: "",  // auto-detect system Google Chrome
+        // Headless:   false, // true = --headless=new on the same binary
+        // Hidden:     false, // headed, off-screen
+        // Profile:    "default",
+        StartURL: "https://example.com",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer b.Close()
 
-    // Get page object
-    page := b.NewPage()
-    
-    // Navigate to URL wanted (use this as a reload or refresh of the same site if needed)
-    page.Goto("https://login.example.com")
-    
-    // Fill form fields -- fills off locator input then can fill (paste) or type in different ways
-    page.Locator("#email").Fill("user@email.com")
-    page.Locator("#password").TypeWithMistakes("password123", 100)
-    
-    // Click submit
-    page.Locator("#submit").Click()
-    
-    // Wait 3 seconds -- 3 second delay or timeout
-    page.YellowLight(3000)
+    page, err := b.Page(ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    if err := page.Locator("#email").Fill(ctx, "user@email.com"); err != nil {
+        log.Fatal(err)
+    }
+    if err := page.Locator("#password").Type(ctx, "secret", input.Typing{WPM: 180, Mistakes: true}); err != nil {
+        log.Fatal(err)
+    }
+    if err := page.Locator("#submit").Click(ctx); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 
-## Contributing
+### Greenlight aliases
 
-Pull requests are welcome. Dm me on discord @pickumaternu if you have an idea thats realistic in automation. No I will not tell you how to make an akamai gen or recap gen or anything of a gen. Left out cookie saving this time on purpose. 
+`GreenLight` / `YellowLight` / `RedLight` still exist. `GreenLight` now returns `(*Browser, error)` instead of calling `log.Fatal`.
 
-The framework lacks functionality as you only really need to input things and click buttons in a framework. I didnt see the need to add some features like routes or whatever as this should be a basic framework against detection. 
+```go
+b, err := echo.GreenLight("", false, "https://example.com")
+if err != nil {
+    log.Fatal(err)
+}
+defer b.RedLight()
 
-This does not work on CLOUDFLARE or any CAPTCHA, helps users bypass fingerprint anitbots such as Akamai, Kasada, DataDome, and others. 
+page, err := b.Page(context.Background())
+page.YellowLight(500)
+```
 
-Checkout my previous work @ https://github.com/bosniankicks/Kurva-Krome
+## Options
 
-Send me money as support for redbulls and geek bars -- cashapp -- $bosniankicks
+| Field | Default | Notes |
+|---|---|---|
+| `ChromePath` | auto-detect | Or `ECHO_CHROME_PATH` |
+| `Headless` | `false` | Real Chrome `--headless=new`. UA is stock Chrome (not HeadlessChrome); screen is `--screen-info` matching the machine when possible |
+| `Hidden` | `false` | Headed window off-screen (`--window-position` / `--start-minimized`). Prefer this over Headless when a detector keys on headless GPU/screen |
+| `Width` / `Height` | OS / 1920×1080 | `--window-size`. Headed uses Chrome's OS default unless set |
+| `Profile` | `"default"` | Under `%LOCALAPPDATA%\EchoBrowser\profiles` (Windows), `~/Library/Application Support/EchoBrowser/profiles` (macOS), `~/.local/share/echobrowser/profiles` (Linux) |
+| `UserDataDir` | derived from `Profile` | Explicit Chrome user-data-dir |
+| `Ephemeral` | `false` | Temp profile, deleted on `Close` |
+| `Proxy` | none | Passed to Chrome as `--proxy-server` so TLS stays Chrome's. `http://user:pass@host:port` is rewritten through a local CONNECT forwarder |
+| `StartURL` | `about:blank` | Navigated after attach |
+| `ExtraArgs` | none | Extra Chrome flags. Launch fails if they include `--enable-automation`, `--headless` (unless `Headless` is set), `--remote-allow-origins=*`, or `--remote-debugging-port=9222` |
+
+Do not run two Chromes against the same persistent profile at once.
+
+## What the driver does not send
+
+Denied by default (see `pkg/stealth`):
+
+- `Runtime.enable`
+- `Runtime.evaluate` without an isolated `contextId`
+- `Page.addScriptToEvaluateOnNewDocument`
+- `Network.enable`, `Fetch.enable`, request interception
+- `DOM.enable`, `Overlay.*`, `Emulation.set*Override`
+- `Input.insertText` of whole strings (keys are `dispatchKeyEvent`)
+
+## Testing
+
+```bash
+go test ./...
+```
+
+Chrome end-to-end:
+
+```bash
+set ECHO_E2E=1
+go test -count=1 -run "TestTrustedClickAndType|TestHeadlessFingerprint"
+```
+
+Live detector pages (rebrowser, sannysoft, …):
+
+```bash
+go run ./cmd/probe
+go run ./cmd/probe -headless
+go run ./cmd/probe -hidden
+set ECHO_E2E_DETECT=1
+go test -count=1 -run TestDetectRebrowser
+```
+
+Echo does not inject stealth scripts and does not use ChromeDriver (no `cdc_` / `$cdc_` leaks). The probe should look like this machine's Chrome: no `Runtime.enable` leak, no `navigator.webdriver`, no Playwright/Selenium bindings.
+
+Debug:
+
+- `ECHO_CDP_DEBUG=1` logs CDP method names
+- `ECHO_CHROME_DEBUG=1` shows Chrome stdout/stderr
+
+## Layout
+
+```
+pkg/cdp       websocket session, one reader, flattened targets
+pkg/chrome    find / launch / profiles / proxy
+pkg/stealth   CDP allow-list and launch-flag audit
+pkg/input     Bezier mouse, Fitts timing, real key events
+pkg/page      isolated-world locators
+pkg/browser   Target.attach + public Browser
+```
 
 ## License
 
-[MIT](https://choosealicense.com/licenses/mit/)
-
-# Capsolver Sponsor
-[![CapSolver Ads](https://github.com/user-attachments/assets/793acd61-2ad9-46cf-bdec-60a61be962e1)](https://www.capsolver.com/?utm_source=github&utm_medium=repo&utm_campaign=scraping&utm_term=Kurva-Krome)
-
-Alternatively, you may use Capsolver. For more information and to get started, visit the official [Capsolver website](https://www.capsolver.com/?utm_source=github&utm_medium=repo&utm_campaign=scraping&utm_term=Kurva-Krome).
+MIT. Forked from [greenlight](https://github.com/bosniankicks/greenlight).

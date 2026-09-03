@@ -1,0 +1,9 @@
+*.exe
+*.test
+*.out
+dist/
+.idea/
+.vscode/
+profiles/
+echo-browser
+/basic
