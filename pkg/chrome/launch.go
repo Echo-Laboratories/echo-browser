@@ -44,6 +44,7 @@ type StartConfig struct {
 	UserAgent   string
 	ScreenInfo  string
 	ProxyServer string
+	ProxyBypass string
 	ExtraArgs   []string
 	StartURL    string
 }
@@ -57,6 +58,7 @@ func Start(ctx context.Context, cfg StartConfig) (*Process, error) {
 	port := ln.Addr().(*net.TCPAddr).Port
 	_ = ln.Close()
 
+	product, _ := ProductVersion(cfg.Binary)
 	origin := fmt.Sprintf("http://127.0.0.1:%d", port)
 	args := BuildArgs(LaunchArgs{
 		Port:        port,
@@ -68,6 +70,7 @@ func Start(ctx context.Context, cfg StartConfig) (*Process, error) {
 		UserAgent:   cfg.UserAgent,
 		ScreenInfo:  cfg.ScreenInfo,
 		ProxyServer: cfg.ProxyServer,
+		ProxyBypass: cfg.ProxyBypass,
 		Extra:       cfg.ExtraArgs,
 		StartURL:    cfg.StartURL,
 		AllowOrigin: origin,
@@ -86,7 +89,7 @@ func Start(ctx context.Context, cfg StartConfig) (*Process, error) {
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("chrome: start: %w", err)
+		return nil, fmt.Errorf("chrome: start %s: %w", chromeIdent(cfg.Binary, product), err)
 	}
 	p := &Process{
 		Cmd:         cmd,
@@ -100,9 +103,16 @@ func Start(ctx context.Context, cfg StartConfig) (*Process, error) {
 
 	if err := waitAlive(ctx, p); err != nil {
 		_ = p.Kill()
-		return nil, err
+		return nil, fmt.Errorf("chrome: %s: %w", chromeIdent(cfg.Binary, product), err)
 	}
 	return p, nil
+}
+
+func chromeIdent(bin, product string) string {
+	if product == "" {
+		return bin
+	}
+	return bin + " " + product
 }
 
 func waitAlive(ctx context.Context, p *Process) error {

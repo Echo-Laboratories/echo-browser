@@ -18,7 +18,7 @@ It is not a fingerprint-spoofing browser, not a Chromium fork, and not a challen
 go get github.com/Echo-Laboratories/echo-browser
 ```
 
-Requires Go 1.23+ and Google Chrome.
+Requires Go 1.23+ and the latest **Google Chrome** Stable (the system install, not Chromium or `chrome-headless-shell`). Echo reads the product version from that binary and keeps working as Stable ticks forward.
 
 ## Usage
 
@@ -93,7 +93,7 @@ page.YellowLight(500)
 | `Profile` | `"default"` | Under `%LOCALAPPDATA%\EchoBrowser\profiles` (Windows), `~/Library/Application Support/EchoBrowser/profiles` (macOS), `~/.local/share/echobrowser/profiles` (Linux) |
 | `UserDataDir` | derived from `Profile` | Explicit Chrome user-data-dir |
 | `Ephemeral` | `false` | Temp profile, deleted on `Close` |
-| `Proxy` | none | Passed to Chrome as `--proxy-server` so TLS stays Chrome's. `http://user:pass@host:port` is rewritten through a local CONNECT forwarder |
+| `Proxy` | none | Passed to Chrome as `--proxy-server` so TLS stays Chrome's. Schemes: `http`, `https`, `socks5`. `user:pass@` is rewritten through a local forwarder (Chrome sees `http://127.0.0.1:<port>` plus `--proxy-bypass-list=<-loopback>` so the implicit localhost bypass does not skip it). No `Network.enable` |
 | `StartURL` | `about:blank` | Navigated after attach |
 | `ExtraArgs` | none | Extra Chrome flags. Launch fails if they include `--enable-automation`, `--headless` (unless `Headless` is set), `--remote-allow-origins=*`, or `--remote-debugging-port=9222` |
 
@@ -129,6 +129,7 @@ Live detector pages (rebrowser, sannysoft, …):
 go run ./cmd/probe
 go run ./cmd/probe -headless
 go run ./cmd/probe -hidden
+go run ./cmd/probe -proxy http://user:pass@host:port
 set ECHO_E2E_DETECT=1
 go test -count=1 -run TestDetectRebrowser
 ```

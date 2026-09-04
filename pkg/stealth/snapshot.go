@@ -23,8 +23,25 @@ const FingerprintExpr = `(() => {
       plugins.push(navigator.plugins[i].name);
     }
   } catch (e) {}
+  const desc = (obj, prop) => {
+    try {
+      const d = Object.getOwnPropertyDescriptor(obj, prop);
+      if (!d) return null;
+      return {
+        configurable: d.configurable,
+        enumerable: d.enumerable,
+        hasGetter: typeof d.get === 'function',
+        hasValue: Object.prototype.hasOwnProperty.call(d, 'value')
+      };
+    } catch (e) {
+      return {error: String(e)};
+    }
+  };
+  const brands = (navigator.userAgentData && navigator.userAgentData.brands) ? [...navigator.userAgentData.brands] : [];
   return {
     webdriver: navigator.webdriver,
+    webdriverOwn: desc(navigator, 'webdriver'),
+    webdriverProto: desc(Navigator.prototype, 'webdriver'),
     userAgent: navigator.userAgent,
     appVersion: navigator.appVersion,
     platform: navigator.platform,
@@ -39,6 +56,7 @@ const FingerprintExpr = `(() => {
     cookieEnabled: navigator.cookieEnabled,
     chromeType: typeof window.chrome,
     chromeRuntime: !!(window.chrome && window.chrome.runtime),
+    chromeApp: !!(window.chrome && window.chrome.app),
     innerWidth: window.innerWidth,
     innerHeight: window.innerHeight,
     outerWidth: window.outerWidth,
@@ -59,8 +77,10 @@ const FingerprintExpr = `(() => {
     seleniumCDC: typeof document.$cdc_asdjflasutopfhvcZLmcfl_,
     dummyFn: typeof window.dummyFn,
     headlessUA: /HeadlessChrome/i.test(navigator.userAgent),
+    headlessBrand: brands.some(b => /Headless/i.test(b.brand)),
+    greaseBrand: brands.map(b => b.brand).filter(b => /not.?a.?brand/i.test(b)),
     uaData: navigator.userAgentData ? {
-      brands: navigator.userAgentData.brands,
+      brands: brands,
       mobile: navigator.userAgentData.mobile,
       platform: navigator.userAgentData.platform
     } : null

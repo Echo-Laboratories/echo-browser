@@ -16,15 +16,6 @@ func (p *Page) enable(ctx context.Context) error {
 		return nil
 	}
 
-	p.mu.Lock()
-	ua, ver := p.chromeUA, p.chromeVer
-	p.mu.Unlock()
-	if ua != "" && ver != "" {
-		if _, err := p.call.Call(ctx, "Emulation.setUserAgentOverride", chrome.UAOverride(ua, ver)); err != nil {
-			return err
-		}
-	}
-
 	if _, err := p.call.Call(ctx, "Page.enable", nil); err != nil {
 		return err
 	}
@@ -41,8 +32,29 @@ func (p *Page) enable(ctx context.Context) error {
 	p.mu.Lock()
 	p.frameID = frameID
 	p.enabled = true
+	ua, ver := p.chromeUA, p.chromeVer
 	p.mu.Unlock()
+
+	if ua != "" && ver != "" {
+		if err := p.applyHeadlessIdentity(ctx, ua, ver); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func (p *Page) applyHeadlessIdentity(ctx context.Context, ua, ver string) error {
+	var live chrome.UALive
+	if err := p.evaluate(ctx, chrome.UALiveExpr, &live); err != nil {
+		// Do not fall back to a UA-only override; that empties userAgentData.
+		return nil
+	}
+	params, skip := chrome.UAOverrideFromLive(ua, ver, live)
+	if skip {
+		return nil
+	}
+	_, err := p.call.Call(ctx, "Emulation.setUserAgentOverride", params)
+	return err
 }
 
 func (p *Page) onFrameNavigated(params json.RawMessage) {

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -18,6 +19,11 @@ var productVersionRe = regexp.MustCompile(`\b(\d+\.\d+\.\d+\.\d+)\b`)
 func ProductVersion(bin string) (string, error) {
 	if v := versionFromInstallDir(bin); v != "" {
 		return v, nil
+	}
+	if runtime.GOOS == "darwin" {
+		if v := versionFromMacFramework(bin); v != "" {
+			return v, nil
+		}
 	}
 	out, err := exec.Command(bin, "--product-version").Output()
 	if err != nil {
@@ -31,7 +37,17 @@ func ProductVersion(bin string) (string, error) {
 }
 
 func versionFromInstallDir(bin string) string {
-	dir := filepath.Dir(bin)
+	return maxNumericVersionDir(filepath.Dir(bin))
+}
+
+func versionFromMacFramework(bin string) string {
+	// .../Google Chrome.app/Contents/MacOS/Google Chrome
+	contents := filepath.Dir(filepath.Dir(bin))
+	dir := filepath.Join(contents, "Frameworks", "Google Chrome Framework.framework", "Versions")
+	return maxNumericVersionDir(dir)
+}
+
+func maxNumericVersionDir(dir string) string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return ""
@@ -41,13 +57,66 @@ func versionFromInstallDir(bin string) string {
 		if !e.IsDir() {
 			continue
 		}
-		if productVersionRe.MatchString(e.Name()) {
-			if e.Name() > best {
-				best = e.Name()
+		name := e.Name()
+		if name == "Current" {
+			if target, err := os.Readlink(filepath.Join(dir, name)); err == nil {
+				name = filepath.Base(target)
+			} else {
+				continue
 			}
+		}
+		if !productVersionRe.MatchString(name) {
+			continue
+		}
+		if best == "" || CompareProductVersion(name, best) > 0 {
+			best = name
 		}
 	}
 	return best
+}
+
+// CompareProductVersion compares a.b.c.d strings. Higher is newer.
+// Non-numeric segments compare as 0. Empty is less than any version.
+func CompareProductVersion(a, b string) int {
+	as, bs := splitProductVersion(a), splitProductVersion(b)
+	n := len(as)
+	if len(bs) > n {
+		n = len(bs)
+	}
+	for i := 0; i < n; i++ {
+		var ai, bi int
+		if i < len(as) {
+			ai = as[i]
+		}
+		if i < len(bs) {
+			bi = bs[i]
+		}
+		if ai < bi {
+			return -1
+		}
+		if ai > bi {
+			return 1
+		}
+	}
+	return 0
+}
+
+func splitProductVersion(v string) []int {
+	v = strings.TrimSpace(v)
+	if i := strings.IndexByte(v, ' '); i > 0 {
+		v = v[:i]
+	}
+	parts := strings.Split(v, ".")
+	out := make([]int, 0, len(parts))
+	for _, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			out = append(out, 0)
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
 }
 
 // ParseProductVersion pulls a.b.c.d out of noisy chrome stdout.

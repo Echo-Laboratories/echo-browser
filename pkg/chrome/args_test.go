@@ -113,6 +113,7 @@ func TestBuildArgsProxy(t *testing.T) {
 		Port:        1,
 		UserDataDir: "/tmp/p",
 		ProxyServer: "http://127.0.0.1:8080",
+		ProxyBypass: "<-loopback>",
 	})
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "--proxy-server=http://127.0.0.1:8080") {
@@ -120,5 +121,26 @@ func TestBuildArgsProxy(t *testing.T) {
 	}
 	if !strings.Contains(joined, "--force-webrtc-ip-handling-policy=disable_non_proxied_udp") {
 		t.Fatal(joined)
+	}
+	if !strings.Contains(joined, "--proxy-bypass-list=<-loopback>") {
+		t.Fatal(joined)
+	}
+	if issues := stealth.AuditLaunchArgs(args, false); len(issues) != 0 {
+		t.Fatalf("proxy flags must be stealth-allowed: %v", issues)
+	}
+}
+
+func TestBuildArgsRemoteProxyNoLoopbackBypass(t *testing.T) {
+	args := BuildArgs(LaunchArgs{
+		Port:        1,
+		UserDataDir: "/tmp/p",
+		ProxyServer: "http://proxy.example.com:8080",
+	})
+	joined := strings.Join(args, " ")
+	if strings.Contains(joined, "--proxy-bypass-list") {
+		t.Fatal(joined)
+	}
+	if issues := stealth.AuditLaunchArgs(args, false); len(issues) != 0 {
+		t.Fatalf("%v", issues)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // Find locates a Google Chrome binary. ECHO_CHROME_PATH wins if set.
@@ -16,17 +17,45 @@ func Find() (string, error) {
 		}
 		return "", fmt.Errorf("chrome: ECHO_CHROME_PATH not a file: %s", p)
 	}
+	var best string
+	var bestVer string
 	for _, c := range candidates() {
 		if st, err := os.Stat(c); err == nil && !st.IsDir() {
-			return c, nil
+			if rejectNonChrome(c) != "" {
+				continue
+			}
+			ver, _ := ProductVersion(c)
+			if best == "" || CompareProductVersion(ver, bestVer) > 0 {
+				best, bestVer = c, ver
+			}
 		}
+	}
+	if best != "" {
+		return best, nil
 	}
 	for _, name := range pathNames() {
-		if p, err := exec.LookPath(name); err == nil {
-			return p, nil
+		p, err := exec.LookPath(name)
+		if err != nil {
+			continue
 		}
+		if rejectNonChrome(p) != "" {
+			continue
+		}
+		return p, nil
 	}
 	return "", fmt.Errorf("chrome: Google Chrome not found on %s; set ChromePath or ECHO_CHROME_PATH", runtime.GOOS)
+}
+
+func rejectNonChrome(p string) string {
+	low := strings.ToLower(filepath.ToSlash(p))
+	switch {
+	case strings.Contains(low, "headless-shell"):
+		return "chrome-headless-shell"
+	case strings.Contains(low, "chromium"):
+		return "chromium"
+	default:
+		return ""
+	}
 }
 
 func candidates() []string {
@@ -54,7 +83,7 @@ func candidates() []string {
 
 func pathNames() []string {
 	if runtime.GOOS == "windows" {
-		return []string{"chrome.exe", "chrome"}
+		return []string{"chrome.exe"}
 	}
-	return []string{"google-chrome-stable", "google-chrome", "chrome"}
+	return []string{"google-chrome-stable", "google-chrome"}
 }

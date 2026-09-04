@@ -80,6 +80,25 @@ func TestPermissive(t *testing.T) {
 	}
 }
 
+func TestProxyLaunchFlagsAllowed(t *testing.T) {
+	var p Policy
+	if err := p.Allow("Network.enable", nil); err == nil {
+		t.Fatal("Network.enable must stay denied; proxy is a Chrome flag")
+	}
+	if err := p.Allow("Fetch.enable", nil); err == nil {
+		t.Fatal("Fetch.enable must stay denied")
+	}
+	issues := AuditLaunchArgs([]string{
+		"--remote-debugging-port=54321",
+		"--proxy-server=http://127.0.0.1:9",
+		"--proxy-bypass-list=<-loopback>",
+		"--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+	}, false)
+	if len(issues) != 0 {
+		t.Fatalf("proxy flags flagged: %v", issues)
+	}
+}
+
 func TestAuditLaunchArgs(t *testing.T) {
 	issues := AuditLaunchArgs([]string{
 		"--remote-debugging-port=9222",

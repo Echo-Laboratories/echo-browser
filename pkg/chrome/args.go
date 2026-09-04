@@ -17,6 +17,7 @@ type LaunchArgs struct {
 	UserAgent   string // headless: Chrome UA without HeadlessChrome
 	ScreenInfo  string // headless: --screen-info={WxH}, avoids 800x600
 	ProxyServer string // already Chrome-ready, e.g. "http://127.0.0.1:1234"
+	ProxyBypass string // --proxy-bypass-list, e.g. "<-loopback>"
 	Extra       []string
 	StartURL    string
 	AllowOrigin string
@@ -76,6 +77,9 @@ func BuildArgs(a LaunchArgs) []string {
 	if a.ProxyServer != "" {
 		args = append(args, "--proxy-server="+a.ProxyServer)
 		args = append(args, "--force-webrtc-ip-handling-policy=disable_non_proxied_udp")
+		if a.ProxyBypass != "" {
+			args = append(args, "--proxy-bypass-list="+a.ProxyBypass)
+		}
 	}
 	if runtime.GOOS == "linux" {
 		args = append(args, "--password-store=basic")

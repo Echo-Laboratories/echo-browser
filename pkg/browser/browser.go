@@ -106,6 +106,7 @@ func Launch(ctx context.Context, opts Options) (*Browser, error) {
 		Width:       opts.Width,
 		Height:      opts.Height,
 		ProxyServer: proxy.ChromeArg,
+		ProxyBypass: proxy.Bypass,
 		ExtraArgs:   opts.ExtraArgs,
 		StartURL:    "about:blank",
 	}
@@ -164,6 +165,9 @@ func Launch(ctx context.Context, opts Options) (*Browser, error) {
 	if opts.Headless {
 		if ver, err := chrome.ProductVersion(bin); err == nil {
 			b.chromeVer = ver
+			if b.chromeUA == "" {
+				b.chromeUA = chrome.DesktopUA(ver)
+			}
 		}
 	}
 	if ephemeral {
@@ -190,12 +194,9 @@ func Launch(ctx context.Context, opts Options) (*Browser, error) {
 }
 
 func headlessGeometry(start *chrome.StartConfig, bin string) {
-	if start.UserAgent == "" {
-		ver, err := chrome.ProductVersion(bin)
-		if err == nil {
-			start.UserAgent = chrome.DesktopUA(ver)
-		}
-	}
+	// Do not pass --user-agent: it empties navigator.userAgentData so we
+	// cannot keep Chrome's real GREASE brands. HeadlessChrome is stripped
+	// after attach via Emulation.setUserAgentOverride from a live snapshot.
 	sw, sh := chrome.DisplaySize()
 	if sw <= 0 || sh <= 0 {
 		sw, sh = 1920, 1080
